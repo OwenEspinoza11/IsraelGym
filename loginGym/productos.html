@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestión de Productos</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+    button {
+      margin: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <h2>Gestión de Productos</h2>
+
+    <form id="productoForm">
+      <input type="hidden" id="productoId">
+      <input type="text" id="nombre" placeholder="Nombre" required>
+      <input type="text" id="descripcion" placeholder="Descripción" required>
+      <input type="number" id="precio" placeholder="Precio" required step="0.01" min="0">
+      <button type="submit">Guardar Producto</button>
+    </form>
+
+    <button onclick="limpiarFormulario()">Limpiar Formulario</button>
+    <button onclick="cargarProductos()">Actualizar Tabla</button>
+
+    <table id="tablaProductos">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Descripción</th>
+          <th>Precio</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    const form = document.getElementById('productoForm');
+    const tabla = document.querySelector('#tablaProductos tbody');
+    let editando = false;
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const id = document.getElementById('productoId').value;
+      const nombre = document.getElementById('nombre').value;
+      const descripcion = document.getElementById('descripcion').value;
+      const precio = parseFloat(document.getElementById('precio').value);
+
+      const producto = { nombre, descripcion, precio };
+
+      if (id) {
+        fetch(`http://localhost:5000/productos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(producto)
+        })
+        .then(res => res.json())
+        .then(() => {
+          alert('Producto actualizado');
+          cargarProductos();
+          limpiarFormulario();
+        });
+      } else {
+        fetch('http://localhost:5000/productos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(producto)
+        })
+        .then(res => res.json())
+        .then(() => {
+          alert('Producto agregado');
+          cargarProductos();
+          limpiarFormulario();
+        });
+      }
+    });
+
+    function cargarProductos() {
+      tabla.innerHTML = '';
+      fetch('http://localhost:5000/productos')
+        .then(res => res.json())
+        .then(productos => {
+          productos.forEach(p => {
+            const fila = document.createElement('tr');
+            fila.innerHTML = `
+              <td>${p.id}</td>
+              <td>${p.nombre}</td>
+              <td>${p.descripcion}</td>
+              <td>$${p.precio.toFixed(2)}</td>
+              <td>
+                <button onclick="editarProducto(${p.id}, '${p.nombre}', '${p.descripcion}', ${p.precio})">Editar</button>
+                <button onclick="eliminarProducto(${p.id})">Eliminar</button>
+              </td>
+            `;
+            tabla.appendChild(fila);
+          });
+        });
+    }
+
+    function editarProducto(id, nombre, descripcion, precio) {
+      document.getElementById('productoId').value = id;
+      document.getElementById('nombre').value = nombre;
+      document.getElementById('descripcion').value = descripcion;
+      document.getElementById('precio').value = precio;
+    }
+
+    function eliminarProducto(id) {
+      if (confirm("¿Seguro que deseas eliminar este producto?")) {
+        fetch(`http://localhost:5000/productos/${id}`, {
+          method: 'DELETE'
+        })
+        .then(res => res.json())
+        .then(() => {
+          alert('Producto eliminado');
+          cargarProductos();
+        });
+      }
+    }
+
+    function limpiarFormulario() {
+      form.reset();
+      document.getElementById('productoId').value = '';
+    }
+
+    // Cargar productos al abrir la página
+    cargarProductos();
+  </script>
+ <script src="products.js" defer></script>
+
+</body>
+</html>
