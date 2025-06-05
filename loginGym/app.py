@@ -6,7 +6,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Conexión a SQL Server
-server = r'Perryman\SSQLSERVER'
+server = r'OWEN_LAPTOP'
 database = 'IsraelGym'
 connection_string = (
     f'DRIVER={{ODBC Driver 17 for SQL Server}};'
@@ -39,7 +39,7 @@ def login():
     conn.close()
 
     if user:
-        if user.EstadoUsuario.strip().upper() == 'A':
+        if user.EstadoUsuario.strip().upper() == 'ACTIVO':
             return jsonify({
                 'mensaje': 'Login exitoso',
                 'usuario': user.Usuario,
@@ -171,6 +171,139 @@ def obtener_proveedores():
     proveedores = [{'id': row.idProveedor, 'nombre': row.nombreProveedor} for row in cursor.fetchall()]
     conn.close()
     return jsonify(proveedores)
+
+
+
+
+
+# --- Reportes OLAP ---
+@app.route('/reportes/ventas-por-periodo', methods=['GET'])
+def reporte_ventas_periodo():
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            CAST(Fecha AS DATE) as Fecha,
+            COUNT(DISTINCT idVenta) as TotalVentas,
+            SUM(totalVenta) as MontoTotal
+        FROM FactVenta
+        WHERE Fecha BETWEEN ? AND ?
+        GROUP BY CAST(Fecha AS DATE)
+        ORDER BY Fecha
+    """
+    
+    cursor.execute(query, (fecha_inicio, fecha_fin))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'fecha': row.Fecha.strftime('%Y-%m-%d'),
+            'total_ventas': row.TotalVentas,
+            'monto_total': float(row.MontoTotal)
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/productos-mas-vendidos', methods=['GET'])
+def reporte_productos_mas_vendidos():
+    limit = request.args.get('limit', 10)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT TOP (?) 
+            P.NombreProducto,
+            SUM(FV.cantidadVenta) as TotalVendido,
+            SUM(FV.subtotalVenta) as MontoTotal,
+            C.nombreCategoria
+        FROM FactVenta FV
+        JOIN DimProducto P ON FV.idProducto = P.idProducto
+        JOIN CategoriaProducto C ON P.idCategoria = C.idCategoria
+        GROUP BY P.NombreProducto, C.nombreCategoria
+        ORDER BY TotalVendido DESC
+    """
+    
+    cursor.execute(query, (limit))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'producto': row.NombreProducto,
+            'total_vendido': row.TotalVendido,
+            'monto_total': float(row.MontoTotal),
+            'categoria': row.nombreCategoria
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/membresias-activas', methods=['GET'])
+def reporte_membresias_activas():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            M.nombreCatMemb as TipoMembresia,
+            COUNT(*) as Cantidad,
+            SUM(FM.subtotalMembresia) as Ingresos
+        FROM FactMembresia FM
+        JOIN DimMembresia M ON FM.idMembresia = M.idMembresia
+        WHERE FM.FechaFin >= GETDATE()
+        GROUP BY M.nombreCatMemb
+        ORDER BY Cantidad DESC
+    """
+    
+    cursor.execute(query)
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'tipo_membresia': row.TipoMembresia,
+            'cantidad': row.Cantidad,
+            'ingresos': float(row.Ingresos)
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/inventario-bajo', methods=['GET'])
+def reporte_inventario_bajo():
+    umbral = request.args.get('umbral', 10)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            NombreProducto,
+            cantidadProducto as Stock,
+            nombreCategoria,
+            nombreProveedor
+        FROM DimProducto
+        WHERE cantidadProducto <= ?
+        AND estadoProducto = 'ACTIVO'
+        ORDER BY cantidadProducto ASC
+    """
+    
+    cursor.execute(query, (umbral))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'producto': row.NombreProducto,
+            'stock': row.Stock,
+            'categoria': row.nombreCategoria,
+            'proveedor': row.nombreProveedor
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+
+
 
 # --- Ejecutar servidor ---
 if __name__ == '__main__':
