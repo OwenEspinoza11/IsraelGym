@@ -1,12 +1,16 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pyodbc
+from datetime import datetime
+from flask import Flask, render_template
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
+
+#app = Flask(__name__)
 CORS(app)
 
 # Conexión a SQL Server
-server = r'Perryman\SSQLSERVER'
+server = r'OWEN_LAPTOP'
 database = 'IsraelGym'
 connection_string = (
     f'DRIVER={{ODBC Driver 17 for SQL Server}};'
@@ -39,7 +43,7 @@ def login():
     conn.close()
 
     if user:
-        if user.EstadoUsuario.strip().upper() == 'A':
+        if user.EstadoUsuario.strip().upper() == 'ACTIVO':
             return jsonify({
                 'mensaje': 'Login exitoso',
                 'usuario': user.Usuario,
@@ -162,15 +166,457 @@ def eliminar_categoria(id):
     finally:
         conn.close()
 
-# --- Proveedores ---
-@app.route('/proveedores', methods=['GET'])
-def obtener_proveedores():
+    
+    
+ # Rutas para Clientes
+@app.route('/clientes', methods=['GET', 'POST'])
+def manejar_clientes():
+    if request.method == 'GET':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT idCliente, primerNomCliente, segundoNomCliente, primerApeCliente, segApeCliente, 
+                       telefCliente, emailCliente, direccionCliente, Estado, fechaRegistro
+                FROM Cliente
+            """)
+            
+            clientes = []
+            for row in cursor.fetchall():
+                clientes.append({
+                    'id': row.idCliente,
+                    'primerNombre': row.primerNomCliente,
+                    'segundoNombre': row.segundoNomCliente,
+                    'primerApellido': row.primerApeCliente,
+                    'segundoApellido': row.segApeCliente,
+                    'telefono': row.telefCliente,
+                    'email': row.emailCliente,
+                    'direccion': row.direccionCliente,
+                    'estado': row.Estado,
+                    'fechaRegistro': row.fechaRegistro.strftime('%Y-%m-%d') if row.fechaRegistro else None
+                })
+            
+            conn.close()
+            return jsonify(clientes)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO Cliente (
+                    primerNomCliente, segundoNomCliente, primerApeCliente, segApeCliente,
+                    telefCliente, emailCliente, direccionCliente, Estado
+                ) 
+                OUTPUT INSERTED.idCliente
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, 
+                data['primerNombre'], data['segundoNombre'], data['primerApellido'], data['segundoApellido'],
+                data['telefono'], data['email'], data['direccion'], data['estado']
+            )
+            
+            id_nuevo = cursor.fetchone()[0]
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Cliente agregado correctamente', 'id': id_nuevo}), 201
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+
+@app.route('/clientes/<int:id>', methods=['GET', 'PUT', 'DELETE'])
+def manejar_cliente_individual(id):
+    if request.method == 'GET':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT idCliente, primerNomCliente, segundoNomCliente, primerApeCliente, segApeCliente, 
+                       telefCliente, emailCliente, direccionCliente, Estado, fechaRegistro
+                FROM Cliente
+                WHERE idCliente = ?
+            """, id)
+            
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'error': 'Cliente no encontrado'}), 404
+            
+            cliente = {
+                'id': row.idCliente,
+                'primerNombre': row.primerNomCliente,
+                'segundoNombre': row.segundoNomCliente,
+                'primerApellido': row.primerApeCliente,
+                'segundoApellido': row.segApeCliente,
+                'telefono': row.telefCliente,
+                'email': row.emailCliente,
+                'direccion': row.direccionCliente,
+                'estado': row.Estado,
+                'fechaRegistro': row.fechaRegistro.strftime('%Y-%m-%d') if row.fechaRegistro else None
+            }
+            
+            conn.close()
+            return jsonify(cliente)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'PUT':
+        try:
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE Cliente SET
+                    primerNomCliente = ?,
+                    segundoNomCliente = ?,
+                    primerApeCliente = ?,
+                    segApeCliente = ?,
+                    telefCliente = ?,
+                    emailCliente = ?,
+                    direccionCliente = ?,
+                    Estado = ?
+                WHERE idCliente = ?
+            """, 
+                data['primerNombre'], data['segundoNombre'], data['primerApellido'], data['segundoApellido'],
+                data['telefono'], data['email'], data['direccion'], data['estado'], id
+            )
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Cliente no encontrado'}), 404
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Cliente actualizado correctamente'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+
+    elif request.method == 'DELETE':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Cliente WHERE idCliente = ?", id)
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Cliente no encontrado'}), 404
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Cliente eliminado correctamente'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+
+
+
+
+# Rutas para Proveedores
+@app.route('/proveedores', methods=['GET', 'POST'])
+def manejar_proveedores():
+    if request.method == 'GET':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT idProveedor, nombreProveedor, telefProveedor, direccProveedor
+                FROM Proveedor
+            """)
+            
+            proveedores = []
+            for row in cursor.fetchall():
+                proveedores.append({
+                    'idProveedor': row.idProveedor,
+                    'nombreProveedor': row.nombreProveedor,
+                    'telefProveedor': row.telefProveedor,
+                    'direccProveedor': row.direccProveedor
+                })
+            
+            conn.close()
+            return jsonify(proveedores)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO Proveedor (
+                    nombreProveedor, telefProveedor, direccProveedor
+                ) 
+                OUTPUT INSERTED.idProveedor
+                VALUES (?, ?, ?)
+            """, 
+                data['nombreProveedor'], data['telefProveedor'], data['direccProveedor']
+            )
+            
+            id_nuevo = cursor.fetchone()[0]
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'mensaje': 'Proveedor agregado correctamente', 
+                'idProveedor': id_nuevo
+            }), 201
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+
+@app.route('/proveedores/<int:id>', methods=['GET', 'PUT', 'DELETE'])
+def manejar_proveedor_individual(id):
+    if request.method == 'GET':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT idProveedor, nombreProveedor, telefProveedor, direccProveedor
+                FROM Proveedor
+                WHERE idProveedor = ?
+            """, id)
+            
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            proveedor = {
+                'idProveedor': row.idProveedor,
+                'nombreProveedor': row.nombreProveedor,
+                'telefProveedor': row.telefProveedor,
+                'direccProveedor': row.direccProveedor
+            }
+            
+            conn.close()
+            return jsonify(proveedor)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'PUT':
+        try:
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE Proveedor SET
+                    nombreProveedor = ?,
+                    telefProveedor = ?,
+                    direccProveedor = ?
+                WHERE idProveedor = ?
+            """, 
+                data['nombreProveedor'], data['telefProveedor'], data['direccProveedor'], id
+            )
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Proveedor actualizado correctamente'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+
+    elif request.method == 'DELETE':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Proveedor WHERE idProveedor = ?", id)
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Proveedor eliminado correctamente'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+
+
+#--Categoria membresia--
+
+@app.route('/categorias-membresia', methods=['GET'])
+def obtener_categorias_membresia():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT idProveedor, nombreProveedor FROM Proveedor")
-    proveedores = [{'id': row.idProveedor, 'nombre': row.nombreProveedor} for row in cursor.fetchall()]
+    cursor.execute("SELECT idCatMembresia, nombreCatMemb FROM categoriaMembresia")
+    categorias = [{'id': row.idCatMembresia, 'nombre': row.nombreCatMemb} for row in cursor.fetchall()]
     conn.close()
-    return jsonify(proveedores)
+    return jsonify(categorias)
+
+@app.route('/categorias-membresia', methods=['POST'])
+def agregar_categoria_membresia():
+    data = request.get_json()
+    nombre = data['nombre']
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO categoriaMembresia (nombreCatMemb) VALUES (?)", (nombre,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'mensaje': 'Categoría agregada correctamente'}), 201
+
+@app.route('/categorias-membresia/<int:id>', methods=['PUT'])
+def actualizar_categoria_membresia(id):
+    data = request.get_json()
+    nombre = data['nombre']
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE categoriaMembresia SET nombreCatMemb = ? WHERE idCatMembresia = ?", (nombre, id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'mensaje': 'Categoría actualizada correctamente'})
+
+@app.route('/categorias-membresia/<int:id>', methods=['DELETE'])
+def eliminar_categoria_membresia(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM categoriaMembresia WHERE idCatMembresia = ?", (id,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'mensaje': 'Categoría eliminada correctamente'})
+
+
+# --- Reportes OLAP ---
+@app.route('/reportes/ventas-por-periodo', methods=['GET'])
+def reporte_ventas_periodo():
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            CAST(Fecha AS DATE) as Fecha,
+            COUNT(DISTINCT idVenta) as TotalVentas,
+            SUM(totalVenta) as MontoTotal
+        FROM FactVenta
+        WHERE Fecha BETWEEN ? AND ?
+        GROUP BY CAST(Fecha AS DATE)
+        ORDER BY Fecha
+    """
+    
+    cursor.execute(query, (fecha_inicio, fecha_fin))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'fecha': row.Fecha.strftime('%Y-%m-%d'),
+            'total_ventas': row.TotalVentas,
+            'monto_total': float(row.MontoTotal)
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/productos-mas-vendidos', methods=['GET'])
+def reporte_productos_mas_vendidos():
+    limit = request.args.get('limit', 10)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT TOP (?) 
+            P.NombreProducto,
+            SUM(FV.cantidadVenta) as TotalVendido,
+            SUM(FV.subtotalVenta) as MontoTotal,
+            C.nombreCategoria
+        FROM FactVenta FV
+        JOIN DimProducto P ON FV.idProducto = P.idProducto
+        JOIN CategoriaProducto C ON P.idCategoria = C.idCategoria
+        GROUP BY P.NombreProducto, C.nombreCategoria
+        ORDER BY TotalVendido DESC
+    """
+    
+    cursor.execute(query, (limit))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'producto': row.NombreProducto,
+            'total_vendido': row.TotalVendido,
+            'monto_total': float(row.MontoTotal),
+            'categoria': row.nombreCategoria
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/membresias-activas', methods=['GET'])
+def reporte_membresias_activas():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            M.nombreCatMemb as TipoMembresia,
+            COUNT(*) as Cantidad,
+            SUM(FM.subtotalMembresia) as Ingresos
+        FROM FactMembresia FM
+        JOIN DimMembresia M ON FM.idMembresia = M.idMembresia
+        WHERE FM.FechaFin >= GETDATE()
+        GROUP BY M.nombreCatMemb
+        ORDER BY Cantidad DESC
+    """
+    
+    cursor.execute(query)
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'tipo_membresia': row.TipoMembresia,
+            'cantidad': row.Cantidad,
+            'ingresos': float(row.Ingresos)
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/inventario-bajo', methods=['GET'])
+def reporte_inventario_bajo():
+    umbral = request.args.get('umbral', 10)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            NombreProducto,
+            cantidadProducto as Stock,
+            nombreCategoria,
+            nombreProveedor
+        FROM DimProducto
+        WHERE cantidadProducto <= ?
+        AND estadoProducto = 'ACTIVO'
+        ORDER BY cantidadProducto ASC
+    """
+    
+    cursor.execute(query, (umbral))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'producto': row.NombreProducto,
+            'stock': row.Stock,
+            'categoria': row.nombreCategoria,
+            'proveedor': row.nombreProveedor
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
 
 # --- Ejecutar servidor ---
 if __name__ == '__main__':
