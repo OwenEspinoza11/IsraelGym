@@ -19,6 +19,7 @@
         <li onclick="mostrarSeccion('seccionClientes')">Clientes</li>
         <li onclick="mostrarSeccion('seccionColaboradores')" id="opColaboradores">Colaboradores</li>
         <li onclick="mostrarSeccion('seccionProveedores')" id="opProveedores">Proveedores</li>
+        <li onclick="mostrarSeccion('seccionCategoriaMembresia')">Categoria membresias</li>
         <li onclick="mostrarSeccion('seccionMembresias')">Membresías</li>
         <li onclick="mostrarSeccion('seccionCompras')">Compras</li>
         <li onclick="mostrarSeccion('seccionVentas')">Ventas</li>
@@ -156,8 +157,80 @@
 
 
       <section id="seccionClientes" class="seccion">
-        <h2>Clientes</h2>
-        <!-- contenido cargado dinámicamente -->
+        <h2>Gestión de Clientes</h2>
+
+        <div class="clientes-container">
+          <!-- Formulario para agregar/editar cliente -->
+          <div class="card form-cliente">
+            <h3>Datos del Cliente</h3>
+            <form id="formCliente">
+              <input type="hidden" id="idClienteEdit">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="primerNombre">Primer Nombre:</label>
+                  <input type="text" id="primerNombre" class="form-control" required>
+                </div>
+                <div class="form-group">
+                  <label for="segundoNombre">Segundo Nombre:</label>
+                  <input type="text" id="segundoNombre" class="form-control">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="primerApellido">Primer Apellido:</label>
+                  <input type="text" id="primerApellido" class="form-control" required>
+                </div>
+                <div class="form-group">
+                  <label for="segundoApellido">Segundo Apellido:</label>
+                  <input type="text" id="segundoApellido" class="form-control">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="telefono">Teléfono:</label>
+                <input type="text" id="telefono" class="form-control" required>
+              </div>
+              <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" class="form-control">
+              </div>
+              <div class="form-group">
+                <label for="direccion">Dirección:</label>
+                <textarea id="direccion" class="form-control" rows="2"></textarea>
+              </div>
+              <div class="form-group">
+                <label for="estado">Estado:</label>
+                <select id="estado" class="form-control">
+                  <option value="A">Activo</option>
+                  <option value="I">Inactivo</option>
+                </select>
+              </div>
+              <button type="submit" class="btn-primary">Guardar</button>
+              <button type="button" id="btnCancelarEdit" class="btn-cancel" style="display:none;">Cancelar</button>
+            </form>
+          </div>
+
+          <!-- Listado de clientes -->
+          <div class="card lista-clientes">
+            <h3>Listado de Clientes</h3>
+            <div class="table-container">
+              <table id="tablaClientes">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nombre Completo</th>
+                    <th>Teléfono</th>
+                    <th>Email</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Los clientes se cargarán aquí dinámicamente -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
 
 
@@ -169,8 +242,92 @@
 
       <section id="seccionProveedores" class="seccion">
         <h2>Proveedores</h2>
-        <!-- Solo para administrador -->
+
+        <!-- Formulario para agregar proveedores -->
+        <div class="form-container">
+          <h3>Agregar Nuevo Proveedor</h3>
+          <form id="formProveedor">
+            <div class="form-group">
+              <label for="nombreProveedor">Nombre:</label>
+              <input type="text" id="nombreProveedor" name="nombreProveedor" required>
+            </div>
+
+            <div class="form-group">
+              <label for="telefProveedor">Teléfono:</label>
+              <input type="text" id="telefProveedor" name="telefProveedor" pattern="[0-9]{8}"
+                title="8 dígitos numéricos" required>
+            </div>
+
+            <div class="form-group">
+              <label for="direccProveedor">Dirección:</label>
+              <input type="text" id="direccProveedor" name="direccProveedor" required>
+            </div>
+
+            <button type="submit" class="btn-submit">Guardar Proveedor</button>
+            <button type="button" id="btnCancelarEdit" class="btn-cancel" style="display:none;">Cancelar</button>
+          </form>
+        </div>
+
+        <!-- Tabla de proveedores existentes -->
+        <div class="table-container">
+          <h3>Listado de Proveedores</h3>
+          <table id="tablaProveedores">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Teléfono</th>
+                <th>Dirección</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Los datos se llenarán dinámicamente con JavaScript -->
+            </tbody>
+          </table>
+        </div>
       </section>
+
+      <section id="seccionCategoriaMembresia" class="seccion">
+        <h2>Categorías de Membresía</h2>
+
+        <div class="categoriasMembresia-container">
+          <!-- Formulario para agregar/editar categoría -->
+          <div class="card form-agregarMembresia">
+            <h3>Gestión de Categorías</h3>
+            <form id="formCategoriaMembresia">
+              <input type="hidden" id="idCatMembresiaEdit">
+              <div class="form-group">
+                <input type="text" id="nombreCatMemb" placeholder="Nombre de la categoría" class="form-control"
+                  required>
+              </div>
+              <button type="submit" class="btn-primary">Guardar</button>
+              <button type="button" id="btnCancelarEdit" class="btn-cancel" style="display:none;">Cancelar</button>
+            </form>
+          </div>
+
+          <!-- Listado de categorías -->
+          <div class="card lista-categorias">
+            <h3>Listado de Categorías</h3>
+            <div class="table-container">
+              <table id="tablaCategoriaMembresia">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Las categorías se cargarán aquí dinámicamente -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
 
       <section id="seccionMembresias" class="seccion">
         <h2>Membresías</h2>
@@ -482,275 +639,18 @@
     cargarMembresias();
   </script>
 
-  <script>
 
-    // Configuración inicial de fechas
-    document.addEventListener('DOMContentLoaded', function () {
-      const hoy = new Date();
-      const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
-      document.getElementById('fechaInicio').value = primerDiaMes.toISOString().split('T')[0];
-      document.getElementById('fechaFin').value = hoy.toISOString().split('T')[0];
+  <script src="js/dashboard.js"> //script para cargar reportes y estadísticas</script>
 
-      cargarReportes();
-    });
+  <script src="js/clientes.js"> //script para gestionar clientes</script>
 
-    // Cargar todos los reportes
-    function cargarReportes() {
-      const fechaInicio = document.getElementById('fechaInicio').value;
-      const fechaFin = document.getElementById('fechaFin').value;
+  <script src="js/proveedor.js"></script>
 
-      cargarVentasPorPeriodo(fechaInicio, fechaFin);
-      cargarProductosMasVendidos();
-      cargarMembresiasActivas();
-      cargarInventarioBajo();
-      cargarResumenes();
-    }
+  <script src="js/categoriaProducto.js"> //categoria producto</script>
 
-    // Cargar ventas por período
-    function cargarVentasPorPeriodo(fechaInicio, fechaFin) {
-      fetch(`http://127.0.0.1:5000/reportes/ventas-por-periodo?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
-        .then(res => res.json())
-        .then(data => {
-          // Actualizar gráfico de ventas
-          const fechas = data.map(item => item.fecha);
-          const montos = data.map(item => item.monto_total);
+  <script src="js/categoriaMembresia.js">//categoria de membresias</script>
 
-          if (window.ventasChart) {
-            window.ventasChart.destroy();
-          }
-
-          const ctx = document.getElementById('grafico-ventas').getContext('2d');
-          window.ventasChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: fechas,
-              datasets: [{
-                label: 'Ventas por día',
-                data: montos,
-                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
-              }]
-            },
-            options: {
-              responsive: true,
-              scales: {
-                y: {
-                  beginAtZero: true
-                }
-              }
-            }
-          });
-
-          // Actualizar tabla de últimas ventas
-          const tbody = document.querySelector('#tabla-ultimas-ventas tbody');
-          tbody.innerHTML = '';
-
-          // Simulamos datos de últimas ventas (deberías crear un endpoint específico para esto)
-          data.slice(0, 5).forEach(venta => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-          <td>${Math.floor(Math.random() * 1000)}</td>
-          <td>${venta.fecha}</td>
-          <td>$${venta.monto_total.toFixed(2)}</td>
-          <td>${Math.floor(Math.random() * 5) + 1} productos</td>
-        `;
-            tbody.appendChild(tr);
-          });
-        });
-    }
-
-    // Cargar productos más vendidos
-    function cargarProductosMasVendidos() {
-      fetch('http://127.0.0.1:5000/reportes/productos-mas-vendidos?limit=5')
-        .then(res => res.json())
-        .then(data => {
-          const productos = data.map(item => item.producto);
-          const cantidades = data.map(item => item.total_vendido);
-
-          if (window.productosChart) {
-            window.productosChart.destroy();
-          }
-
-          const ctx = document.getElementById('grafico-productos').getContext('2d');
-          window.productosChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: productos,
-              datasets: [{
-                label: 'Unidades vendidas',
-                data: cantidades,
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                borderColor: 'rgba(75, 192, 192, 1)',
-                borderWidth: 1
-              }]
-            },
-            options: {
-              responsive: true,
-              scales: {
-                y: {
-                  beginAtZero: true
-                }
-              }
-            }
-          });
-        });
-    }
-
-    // Cargar membresías activas
-    function cargarMembresiasActivas() {
-      fetch('http://127.0.0.1:5000/reportes/membresias-activas')
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById('membresias-activas').textContent =
-            data.reduce((sum, item) => sum + item.cantidad, 0);
-        });
-    }
-
-    // Cargar inventario bajo
-    function cargarInventarioBajo() {
-      fetch('http://127.0.0.1:5000/reportes/inventario-bajo?umbral=10')
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById('productos-bajo-stock').textContent = data.length;
-
-          const tbody = document.querySelector('#tabla-inventario-bajo tbody');
-          tbody.innerHTML = '';
-
-          data.slice(0, 5).forEach(item => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-          <td>${item.producto}</td>
-          <td class="${item.stock < 5 ? 'stock-critico' : 'stock-bajo'}">${item.stock}</td>
-          <td>${item.categoria}</td>
-        `;
-            tbody.appendChild(tr);
-          });
-        });
-    }
-
-    // Cargar resúmenes
-    function cargarResumenes() {
-      // Ventas hoy (simulado)
-      fetch('http://127.0.0.1:5000/reportes/ventas-por-periodo?fecha_inicio=' +
-        new Date().toISOString().split('T')[0] +
-        '&fecha_fin=' + new Date().toISOString().split('T')[0])
-        .then(res => res.json())
-        .then(data => {
-          const totalHoy = data.reduce((sum, item) => sum + item.monto_total, 0);
-          document.getElementById('ventas-hoy').textContent = `$${totalHoy.toFixed(2)}`;
-        });
-
-      // Ingresos mes (simulado)
-      const primerDiaMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-        .toISOString().split('T')[0];
-      const hoy = new Date().toISOString().split('T')[0];
-
-      fetch(`http://127.0.0.1:5000/reportes/ventas-por-periodo?fecha_inicio=${primerDiaMes}&fecha_fin=${hoy}`)
-        .then(res => res.json())
-        .then(data => {
-          const totalMes = data.reduce((sum, item) => sum + item.monto_total, 0);
-          document.getElementById('ingresos-mes').textContent = `$${totalMes.toFixed(2)}`;
-        });
-    }
-  </script>
-
-  <script>
-document.addEventListener('DOMContentLoaded', function() {
-  // Cargar categorías al iniciar
-  cargarCategorias();
-  
-  // Evento para agregar categoría
-  document.getElementById('btnAgregarCategoria').addEventListener('click', agregarCategoria);
-});
-
-function cargarCategorias() {
-  fetch('http://127.0.0.1:5000/categorias')
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Error al cargar categorías');
-      }
-      return response.json();
-    })
-    .then(data => {
-      const tbody = document.getElementById('cuerpoTablaCategorias');
-      tbody.innerHTML = '';
-      
-      data.forEach(categoria => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${categoria.id}</td>
-          <td>${categoria.nombre}</td>
-          <td>
-            <button class="btn-danger" onclick="eliminarCategoria(${categoria.id})">Eliminar</button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      alert(error.message);
-    });
-}
-
-function agregarCategoria() {
-  const nombre = document.getElementById('nombreCategoria').value.trim();
-  
-  if (!nombre) {
-    alert('Por favor ingrese un nombre para la categoría');
-    return;
-  }
-  
-  fetch('http://127.0.0.1:5000/categorias', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({nombre: nombre}),
-  })
-  .then(response => {
-    if (!response.ok) {
-      return response.json().then(err => { throw new Error(err.error || 'Error al agregar categoría'); });
-    }
-    return response.json();
-  })
-  .then(data => {
-    alert(data.mensaje);
-    document.getElementById('nombreCategoria').value = '';
-    cargarCategorias(); // Recargar la lista
-  })
-  .catch(error => {
-    console.error('Error:', error);
-    alert(error.message);
-  });
-}
-
-function eliminarCategoria(id) {
-  if (!confirm('¿Está seguro que desea eliminar esta categoría?')) {
-    return;
-  }
-  
-  fetch(`http://127.0.0.1:5000/categorias/${id}`, {
-    method: 'DELETE',
-  })
-  .then(response => {
-    if (!response.ok) {
-      return response.json().then(err => { throw new Error(err.error || 'Error al eliminar categoría'); });
-    }
-    return response.json();
-  })
-  .then(data => {
-    alert(data.mensaje);
-    cargarCategorias(); // Recargar la lista
-  })
-  .catch(error => {
-    console.error('Error:', error);
-    alert(error.message);
-  });
-}
-</script>
 
 </body>
 <!-- Modal para agregar categoría -->
