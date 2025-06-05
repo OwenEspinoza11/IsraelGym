@@ -1,666 +1,623 @@
-<!DOCTYPE html>
-<html lang="es">
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import pyodbc
+from datetime import datetime
+from flask import Flask, render_template
 
-<head>
-  <meta charset="UTF-8">
-  <title>Panel Principal - Israel Gym</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 
-<body>
-  <div class="dashboard-container">
-    <aside class="sidebar">
-      <h2>Israel Gym</h2>
-      <ul>
-        <li onclick="mostrarSeccion('seccionInicio')">Inicio</li>
-        <li onclick="mostrarSeccion('seccionProductos')">Productos</li>
-        <li onclick="mostrarSeccion('seccionCategorias')">Categorias</li>
-        <li onclick="mostrarSeccion('seccionClientes')">Clientes</li>
-        <li onclick="mostrarSeccion('seccionColaboradores')" id="opColaboradores">Colaboradores</li>
-        <li onclick="mostrarSeccion('seccionProveedores')" id="opProveedores">Proveedores</li>
-        <li onclick="mostrarSeccion('seccionCategoriaMembresia')">Categoria membresias</li>
-        <li onclick="mostrarSeccion('seccionMembresias')">Membresías</li>
-        <li onclick="mostrarSeccion('seccionCompras')">Compras</li>
-        <li onclick="mostrarSeccion('seccionVentas')">Ventas</li>
-        <li onclick="mostrarSeccion('seccionCuenta')">Mi Cuenta</li>
-      </ul>
-    </aside>
+#app = Flask(__name__)
+CORS(app)
 
-    <main class="main-content">
-      <h1>Inicio</h1>
+# Conexión a SQL Server
+server = r'OWEN_LAPTOP'
+database = 'IsraelGym'
+connection_string = (
+    f'DRIVER={{ODBC Driver 17 for SQL Server}};'
+    f'SERVER={server};'
+    f'DATABASE={database};'
+    f'Trusted_Connection=yes;'
+)
 
-      <!-- <section id="seccionInicio" class="seccion">
-        <h2>Inicio</h2>
-         contenido cargado dinámicamente
-    </section> -->
+def get_db_connection():
+    return pyodbc.connect(connection_string)
 
-      <section id="seccionInicio" class="seccion">
-        <h2>Reportes y Estadísticas</h2>
+# --- Login ---
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    usuario = data.get('Usuario')
+    contrasena = data.get('Password')
 
-        <div class="filtros-reportes">
-          <div>
-            <label>Fecha inicio:</label>
-            <input type="date" id="fechaInicio" value="">
-          </div>
-          <div>
-            <label>Fecha fin:</label>
-            <input type="date" id="fechaFin" value="">
-          </div>
-          <button onclick="cargarReportes()">Aplicar Filtros</button>
-        </div>
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-        <div class="dashboard-grid">
-          <!-- Tarjetas resumen -->
-          <div class="card">
-            <h3>Ventas Hoy</h3>
-            <div class="valor" id="ventas-hoy">Cargando...</div>
-          </div>
+    cursor.execute("""
+        SELECT U.IdUsuario, U.Usuario, U.EstadoUsuario, R.NombreRol
+        FROM Usuario U
+        JOIN Rol R ON U.idRol = R.idRol
+        WHERE U.Usuario = ? AND U.Password = ?
+    """, (usuario, contrasena))
 
-          <div class="card">
-            <h3>Membresías Activas</h3>
-            <div class="valor" id="membresias-activas">Cargando...</div>
-          </div>
+    user = cursor.fetchone()
+    conn.close()
 
-          <div class="card">
-            <h3>Productos Bajo Stock</h3>
-            <div class="valor" id="productos-bajo-stock">Cargando...</div>
-          </div>
+    if user:
+        if user.EstadoUsuario.strip().upper() == 'ACTIVO':
+            return jsonify({
+                'mensaje': 'Login exitoso',
+                'usuario': user.Usuario,
+                'rol': user.NombreRol,
+                'estado': user.EstadoUsuario,
+                'id': user.IdUsuario
+            })
+        else:
+            return jsonify({'mensaje': 'Usuario inactivo'}), 403
+    else:
+        return jsonify({'mensaje': 'Credenciales incorrectas'}), 401
 
-          <div class="card">
-            <h3>Ingresos Mes</h3>
-            <div class="valor" id="ingresos-mes">Cargando...</div>
-          </div>
+# --- Productos ---
+@app.route('/productos', methods=['GET'])
+def obtener_productos():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT P.idProducto, P.NombreProducto, P.descripcionProducto, P.precioProducto,
+               P.Costoproducto, P.cantidadProducto, P.estadoProducto,
+               C.nombreCategoria, Pr.nombreProveedor
+        FROM Producto P
+        JOIN CategoriaProducto C ON P.idCategoria = C.idCategoria
+        JOIN Proveedor Pr ON P.idProveedor = Pr.idProveedor
+    """)
+    productos = []
+    for row in cursor.fetchall():
+        productos.append({
+            'id': row.idProducto,
+            'nombre': row.NombreProducto,
+            'descripcion': row.descripcionProducto,
+            'precio': row.precioProducto,
+            'costo': row.Costoproducto,
+            'cantidad': row.cantidadProducto,
+            'estado': row.estadoProducto,
+            'categoria': row.nombreCategoria,
+            'proveedor': row.nombreProveedor
+        })
+    conn.close()
+    return jsonify(productos)
 
-          <!-- Gráficos principales -->
-          <div class="grafico-card">
-            <h3>Ventas por Día</h3>
-            <div id="grafico-ventas" style="height: 300px;"></div>
-          </div>
+@app.route('/productos', methods=['POST'])
+def agregar_producto():
+    data = request.json
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO Producto (
+            NombreProducto, descripcionProducto, precioProducto, Costoproducto,
+            cantidadProducto, estadoProducto, idCategoria, idProveedor
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        data['nombre'], data['descripcion'], data['precio'], data['costo'],
+        data['cantidad'], data['estado'], data['idCategoria'], data['idProveedor']
+    ))
+    conn.commit()
+    conn.close()
+    return jsonify({'mensaje': 'Producto agregado correctamente'})
 
-          <div class="grafico-card">
-            <h3>Productos Más Vendidos</h3>
-            <div id="grafico-productos" style="height: 300px;"></div>
-          </div>
+# --- Categorías ---
+@app.route('/categorias', methods=['GET'])
+def obtener_categorias():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT idCategoria, nombreCategoria FROM CategoriaProducto")
+    categorias = [{'id': row.idCategoria, 'nombre': row.nombreCategoria} for row in cursor.fetchall()]
+    conn.close()
+    return jsonify(categorias)
 
-          <!-- Tablas -->
-          <div class="tabla-card">
-            <h3>Últimas Ventas</h3>
-            <div class="table-container">
-              <table id="tabla-ultimas-ventas">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Fecha</th>
-                    <th>Total</th>
-                    <th>Productos</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
+@app.route('/categorias', methods=['POST'])
+def agregar_categoria():
+    data = request.json
+    nombre = data.get('nombre')
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Verificar si la categoría ya existe
+    cursor.execute("SELECT nombreCategoria FROM CategoriaProducto WHERE nombreCategoria = ?", (nombre,))
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({'error': 'La categoría ya existe'}), 400
+    
+    cursor.execute("INSERT INTO CategoriaProducto (nombreCategoria) VALUES (?)", (nombre,))
+    conn.commit()
+    conn.close()
+    return jsonify({'mensaje': 'Categoría registrada'})
 
-          <div class="tabla-card">
-            <h3>Inventario Bajo</h3>
-            <div class="table-container">
-              <table id="tabla-inventario-bajo">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Stock</th>
-                    <th>Categoría</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
+@app.route('/categorias/<int:id>', methods=['DELETE'])
+def eliminar_categoria(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Verificar si hay productos asociados
+        cursor.execute("SELECT COUNT(*) FROM Producto WHERE idCategoria = ?", (id,))
+        count = cursor.fetchone()[0]
+        
+        if count > 0:
+            # Opción 1: No permitir eliminación si hay productos
+            # conn.close()
+            # return jsonify({'error': 'No se puede eliminar, hay productos asociados'}), 400
+            
+            # Opción 2: Actualizar productos para que no tengan categoría
+            cursor.execute("UPDATE Producto SET idCategoria = NULL WHERE idCategoria = ?", (id,))
+        
+        # Eliminar la categoría
+        cursor.execute("DELETE FROM CategoriaProducto WHERE idCategoria = ?", (id,))
+        conn.commit()
+        
+        if count > 0:
+            mensaje = f'Categoría eliminada. {count} productos actualizados (sin categoría).'
+        else:
+            mensaje = 'Categoría eliminada correctamente'
+            
+        return jsonify({'mensaje': mensaje})
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
-
-      <section id="seccionCategorias" class="seccion">
-        <h2>Categorías</h2>
-
-        <div class="categorias-container">
-          <!-- Formulario para agregar nueva categoría -->
-          <div class="card form-agregar">
-            <h3>Agregar Nueva Categoría</h3>
-            <div class="form-group">
-              <input type="text" id="nombreCategoria" placeholder="Nombre de la categoría" class="form-control">
-            </div>
-            <button id="btnAgregarCategoria" class="btn-primary">Agregar</button>
-          </div>
-
-          <!-- Listado de categorías -->
-          <div class="card lista-categorias">
-            <h3>Listado de Categorías</h3>
-            <div class="table-container">
-              <table id="tablaCategorias">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Nombre</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody id="cuerpoTablaCategorias">
-                  <!-- Las categorías se cargarán aquí dinámicamente -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-
-      <section id="seccionClientes" class="seccion">
-        <h2>Gestión de Clientes</h2>
-
-        <div class="clientes-container">
-          <!-- Formulario para agregar/editar cliente -->
-          <div class="card form-cliente">
-            <h3>Datos del Cliente</h3>
-            <form id="formCliente">
-              <input type="hidden" id="idClienteEdit">
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="primerNombre">Primer Nombre:</label>
-                  <input type="text" id="primerNombre" class="form-control" required>
-                </div>
-                <div class="form-group">
-                  <label for="segundoNombre">Segundo Nombre:</label>
-                  <input type="text" id="segundoNombre" class="form-control">
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="primerApellido">Primer Apellido:</label>
-                  <input type="text" id="primerApellido" class="form-control" required>
-                </div>
-                <div class="form-group">
-                  <label for="segundoApellido">Segundo Apellido:</label>
-                  <input type="text" id="segundoApellido" class="form-control">
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="telefono">Teléfono:</label>
-                <input type="text" id="telefono" class="form-control" required>
-              </div>
-              <div class="form-group">
-                <label for="email">Email:</label>
-                <input type="email" id="email" class="form-control">
-              </div>
-              <div class="form-group">
-                <label for="direccion">Dirección:</label>
-                <textarea id="direccion" class="form-control" rows="2"></textarea>
-              </div>
-              <div class="form-group">
-                <label for="estado">Estado:</label>
-                <select id="estado" class="form-control">
-                  <option value="A">Activo</option>
-                  <option value="I">Inactivo</option>
-                </select>
-              </div>
-              <button type="submit" class="btn-primary">Guardar</button>
-              <button type="button" id="btnCancelarEdit" class="btn-cancel" style="display:none;">Cancelar</button>
-            </form>
-          </div>
-
-          <!-- Listado de clientes -->
-          <div class="card lista-clientes">
-            <h3>Listado de Clientes</h3>
-            <div class="table-container">
-              <table id="tablaClientes">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Nombre Completo</th>
-                    <th>Teléfono</th>
-                    <th>Email</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <!-- Los clientes se cargarán aquí dinámicamente -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-
-      <section id="seccionColaboradores" class="seccion">
-        <h2>Colaboradores</h2>
-        <!-- Solo para administrador -->
-      </section>
-
-      <section id="seccionProveedores" class="seccion">
-        <h2>Proveedores</h2>
-
-        <!-- Formulario para agregar proveedores -->
-        <div class="form-container">
-          <h3>Agregar Nuevo Proveedor</h3>
-          <form id="formProveedor">
-            <div class="form-group">
-              <label for="nombreProveedor">Nombre:</label>
-              <input type="text" id="nombreProveedor" name="nombreProveedor" required>
-            </div>
-
-            <div class="form-group">
-              <label for="telefProveedor">Teléfono:</label>
-              <input type="text" id="telefProveedor" name="telefProveedor" pattern="[0-9]{8}"
-                title="8 dígitos numéricos" required>
-            </div>
-
-            <div class="form-group">
-              <label for="direccProveedor">Dirección:</label>
-              <input type="text" id="direccProveedor" name="direccProveedor" required>
-            </div>
-
-            <button type="submit" class="btn-submit">Guardar Proveedor</button>
-            <button type="button" id="btnCancelarEdit" class="btn-cancel" style="display:none;">Cancelar</button>
-          </form>
-        </div>
-
-        <!-- Tabla de proveedores existentes -->
-        <div class="table-container">
-          <h3>Listado de Proveedores</h3>
-          <table id="tablaProveedores">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>Teléfono</th>
-                <th>Dirección</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Los datos se llenarán dinámicamente con JavaScript -->
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="seccionCategoriaMembresia" class="seccion">
-        <h2>Categorías de Membresía</h2>
-
-        <div class="categoriasMembresia-container">
-          <!-- Formulario para agregar/editar categoría -->
-          <div class="card form-agregarMembresia">
-            <h3>Gestión de Categorías</h3>
-            <form id="formCategoriaMembresia">
-              <input type="hidden" id="idCatMembresiaEdit">
-              <div class="form-group">
-                <input type="text" id="nombreCatMemb" placeholder="Nombre de la categoría" class="form-control"
-                  required>
-              </div>
-              <button type="submit" class="btn-primary">Guardar</button>
-              <button type="button" id="btnCancelarEdit" class="btn-cancel" style="display:none;">Cancelar</button>
-            </form>
-          </div>
-
-          <!-- Listado de categorías -->
-          <div class="card lista-categorias">
-            <h3>Listado de Categorías</h3>
-            <div class="table-container">
-              <table id="tablaCategoriaMembresia">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Nombre</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <!-- Las categorías se cargarán aquí dinámicamente -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-
-      <section id="seccionMembresias" class="seccion">
-        <h2>Membresías</h2>
-        <form id="formMembresia">
-          <input type="hidden" id="idDetalleMembresia">
-          <label>Cliente:</label>
-          <input type="number" id="idCliente" required>
-          <label>Membresía:</label>
-          <input type="number" id="idMembresia" required>
-          <label>Subtotal:</label>
-          <input type="number" step="0.01" id="subtotal" required>
-          <button type="submit">Guardar</button>
-        </form>
-        <table id="tablaMembresias">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Cliente</th>
-              <th>Membresía</th>
-              <th>Subtotal</th>
-              <th>Fecha</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </section>
-
-      <section id="seccionCompras" class="seccion">
-        <h2>Compras</h2>
-        <!-- contenido cargado dinámicamente -->
-      </section>
-
-      <section id="seccionVentas" class="seccion">
-        <h2>Ventas</h2>
-        <!-- contenido cargado dinámicamente -->
-      </section>
-
-      <section id="seccionCuenta" class="seccion">
-        <h2>Mi Cuenta</h2>
-        <p id="infoCuenta"></p>
-        <button onclick="cerrarSesion()">Cerrar sesión</button>
-      </section>
-
-
-      <section id="seccionProductos" class="seccion">
-        <h2>Productos</h2>
-        <form id="formProducto">
-          <input type="hidden" id="idProducto">
-
-          <label>Nombre del Producto:</label>
-          <input type="text" id="nombreProducto" required>
-
-          <label>Descripción:</label>
-          <input type="text" id="descripcionProducto" required>
-
-          <label>Cantidad:</label>
-          <input type="number" id="cantidadProducto" required>
-
-          <label>Precio:</label>
-          <input type="number" step="0.01" id="precioProducto" required>
-
-          <label>Costo:</label>
-          <input type="number" step="0.01" id="costoProducto" required>
-
-          <script>
-            function mostrarModalCategoria() {
-              document.getElementById("modalCategoria").style.display = "block";
-            }
-
-            function cerrarModalCategoria() {
-              document.getElementById("modalCategoria").style.display = "none";
-              document.getElementById("nuevaCategoria").value = "";
-            }
-
-            function guardarCategoria() {
-              const nombre = document.getElementById("nuevaCategoria").value.trim();
-              if (!nombre) {
-                alert("Ingrese un nombre válido para la categoría.");
-                return;
-              }
-
-              fetch("http://localhost:5000/categorias", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ nombre })
-              })
-                .then(res => res.json())
-                .then(() => {
-                  alert("Categoría agregada correctamente");
-                  cerrarModalCategoria();
-                  cargarCategorias();
+    
+    
+ # Rutas para Clientes
+@app.route('/clientes', methods=['GET', 'POST'])
+def manejar_clientes():
+    if request.method == 'GET':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT idCliente, primerNomCliente, segundoNomCliente, primerApeCliente, segApeCliente, 
+                       telefCliente, emailCliente, direccionCliente, Estado, fechaRegistro
+                FROM Cliente
+            """)
+            
+            clientes = []
+            for row in cursor.fetchall():
+                clientes.append({
+                    'id': row.idCliente,
+                    'primerNombre': row.primerNomCliente,
+                    'segundoNombre': row.segundoNomCliente,
+                    'primerApellido': row.primerApeCliente,
+                    'segundoApellido': row.segApeCliente,
+                    'telefono': row.telefCliente,
+                    'email': row.emailCliente,
+                    'direccion': row.direccionCliente,
+                    'estado': row.Estado,
+                    'fechaRegistro': row.fechaRegistro.strftime('%Y-%m-%d') if row.fechaRegistro else None
                 })
-                .catch(err => {
-                  console.error("Error agregando categoría:", err);
-                  alert("Error al agregar la categoría");
-                });
+            
+            conn.close()
+            return jsonify(clientes)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO Cliente (
+                    primerNomCliente, segundoNomCliente, primerApeCliente, segApeCliente,
+                    telefCliente, emailCliente, direccionCliente, Estado
+                ) 
+                OUTPUT INSERTED.idCliente
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, 
+                data['primerNombre'], data['segundoNombre'], data['primerApellido'], data['segundoApellido'],
+                data['telefono'], data['email'], data['direccion'], data['estado']
+            )
+            
+            id_nuevo = cursor.fetchone()[0]
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Cliente agregado correctamente', 'id': id_nuevo}), 201
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+
+@app.route('/clientes/<int:id>', methods=['GET', 'PUT', 'DELETE'])
+def manejar_cliente_individual(id):
+    if request.method == 'GET':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT idCliente, primerNomCliente, segundoNomCliente, primerApeCliente, segApeCliente, 
+                       telefCliente, emailCliente, direccionCliente, Estado, fechaRegistro
+                FROM Cliente
+                WHERE idCliente = ?
+            """, id)
+            
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'error': 'Cliente no encontrado'}), 404
+            
+            cliente = {
+                'id': row.idCliente,
+                'primerNombre': row.primerNomCliente,
+                'segundoNombre': row.segundoNomCliente,
+                'primerApellido': row.primerApeCliente,
+                'segundoApellido': row.segApeCliente,
+                'telefono': row.telefCliente,
+                'email': row.emailCliente,
+                'direccion': row.direccionCliente,
+                'estado': row.Estado,
+                'fechaRegistro': row.fechaRegistro.strftime('%Y-%m-%d') if row.fechaRegistro else None
             }
+            
+            conn.close()
+            return jsonify(cliente)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
-            function cargarCategorias() {
-              fetch("http://127.0.0.1:5000/categorias")
-                .then(res => res.json())
-                .then(categorias => {
-                  const select = document.getElementById("categoriaProducto");
-                  select.innerHTML = "";
-                  categorias.forEach(cat => {
-                    const option = document.createElement("option");
-                    option.value = cat.id;
-                    option.textContent = cat.nombre;
-                    select.appendChild(option);
-                  });
-                });
-            }
+    elif request.method == 'PUT':
+        try:
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE Cliente SET
+                    primerNomCliente = ?,
+                    segundoNomCliente = ?,
+                    primerApeCliente = ?,
+                    segApeCliente = ?,
+                    telefCliente = ?,
+                    emailCliente = ?,
+                    direccionCliente = ?,
+                    Estado = ?
+                WHERE idCliente = ?
+            """, 
+                data['primerNombre'], data['segundoNombre'], data['primerApellido'], data['segundoApellido'],
+                data['telefono'], data['email'], data['direccion'], data['estado'], id
+            )
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Cliente no encontrado'}), 404
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Cliente actualizado correctamente'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
 
-            function cargarProveedores() {
-              fetch("http://localhost:5000/proveedores")
-                .then(res => res.json())
-                .then(proveedores => {
-                  const select = document.getElementById("proveedorProducto");
-                  select.innerHTML = "";
-                  proveedores.forEach(prov => {
-                    const option = document.createElement("option");
-                    option.value = prov.id;
-                    option.textContent = prov.nombre;
-                    select.appendChild(option);
-                  });
-                });
-            }
+    elif request.method == 'DELETE':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Cliente WHERE idCliente = ?", id)
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Cliente no encontrado'}), 404
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Cliente eliminado correctamente'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
 
-            document.getElementById("formProducto").addEventListener("submit", function (e) {
-              e.preventDefault();
 
-              const producto = {
-                nombre: document.getElementById("nombreProducto").value,
-                descripcion: document.getElementById("descripcionProducto").value,
-                precio: parseFloat(document.getElementById("precioProducto").value),
-                costo: parseFloat(document.getElementById("costoProducto").value),
-                cantidad: parseInt(document.getElementById("cantidadProducto").value),
-                estado: document.getElementById("estadoProducto").value,
-                idCategoria: parseInt(document.getElementById("categoriaProducto").value),
-                idProveedor: parseInt(document.getElementById("proveedorProducto").value)
-              };
 
-              fetch("http://127.0.0.1:5000/productos", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(producto)
-              })
-                .then(res => res.json())
-                .then(data => {
-                  alert(data.mensaje || "Producto guardado correctamente");
-                  document.getElementById("formProducto").reset();
-                  cargarProductos();
+
+# Rutas para Proveedores
+@app.route('/proveedores', methods=['GET', 'POST'])
+def manejar_proveedores():
+    if request.method == 'GET':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT idProveedor, nombreProveedor, telefProveedor, direccProveedor
+                FROM Proveedor
+            """)
+            
+            proveedores = []
+            for row in cursor.fetchall():
+                proveedores.append({
+                    'idProveedor': row.idProveedor,
+                    'nombreProveedor': row.nombreProveedor,
+                    'telefProveedor': row.telefProveedor,
+                    'direccProveedor': row.direccProveedor
                 })
-                .catch(err => {
-                  console.error("Error al guardar producto:", err);
-                  alert("Error al guardar el producto");
-                });
-            });
+            
+            conn.close()
+            return jsonify(proveedores)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
-            function cargarProductos() {
-              fetch("http://127.0.0.1:5000/productos")
-                .then(res => res.json())
-                .then(productos => {
-                  const tbody = document.querySelector("#tablaProductos tbody");
-                  tbody.innerHTML = "";
-                  productos.forEach(p => {
-                    const fila = document.createElement("tr");
-                    fila.innerHTML = `
-              <td>${p.id}</td>
-              <td>${p.nombre}</td>
-              <td>${p.descripcion}</td>
-              <td>${p.precio.toFixed(2)}</td>
-              <td>${p.costo.toFixed(2)}</td>
-              <td>${p.cantidad}</td>
-              <td>${p.categoria}</td>
-              <td>${p.proveedor}</td>
-              <td>${p.estado}</td>
-              <td><em>No disponible</em></td>
-              <td><button disabled>Editar</button> <button disabled>Eliminar</button></td>
-            `;
-                    tbody.appendChild(fila);
-                  });
-                });
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO Proveedor (
+                    nombreProveedor, telefProveedor, direccProveedor
+                ) 
+                OUTPUT INSERTED.idProveedor
+                VALUES (?, ?, ?)
+            """, 
+                data['nombreProveedor'], data['telefProveedor'], data['direccProveedor']
+            )
+            
+            id_nuevo = cursor.fetchone()[0]
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'mensaje': 'Proveedor agregado correctamente', 
+                'idProveedor': id_nuevo
+            }), 201
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+
+@app.route('/proveedores/<int:id>', methods=['GET', 'PUT', 'DELETE'])
+def manejar_proveedor_individual(id):
+    if request.method == 'GET':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT idProveedor, nombreProveedor, telefProveedor, direccProveedor
+                FROM Proveedor
+                WHERE idProveedor = ?
+            """, id)
+            
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            proveedor = {
+                'idProveedor': row.idProveedor,
+                'nombreProveedor': row.nombreProveedor,
+                'telefProveedor': row.telefProveedor,
+                'direccProveedor': row.direccProveedor
             }
+            
+            conn.close()
+            return jsonify(proveedor)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
-            document.addEventListener('DOMContentLoaded', () => {
-              cargarCategorias();
-              cargarProveedores();
-              cargarProductos();
+    elif request.method == 'PUT':
+        try:
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE Proveedor SET
+                    nombreProveedor = ?,
+                    telefProveedor = ?,
+                    direccProveedor = ?
+                WHERE idProveedor = ?
+            """, 
+                data['nombreProveedor'], data['telefProveedor'], data['direccProveedor'], id
+            )
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Proveedor actualizado correctamente'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
 
-              const btn = document.querySelector("button[data-modal='agregarCategoria']");
-              if (btn) btn.addEventListener("click", mostrarModalCategoria);
-            });
-          </script>
-          <label>Categoría:</label>
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <select id="categoriaProducto" required></select>
-            <button type="button" onclick="mostrarModalCategoria()">Agregar Categoria</button>
-          </div>
-
-          <label>Proveedor:</label>
-          <select id="proveedorProducto" required></select>
-
-          <label>Imagen:</label>
-          <input type="file" id="imagenProducto" accept="image/*">
-
-          <label>Estado:</label>
-          <select id="estadoProducto" required>
-            <option value="Disponible">Disponible</option>
-            <option value="No disponible">No disponible</option>
-          </select>
-
-          <button type="submit">Guardar Producto</button>
-        </form>
-
-        <table id="tablaProductos">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>Descripción</th>
-              <th>Precio</th>
-              <th>Costo</th>
-              <th>Cantidad</th>
-              <th>Categoría</th>
-              <th>Proveedor</th>
-              <th>Estado</th>
-              <th>Imagen</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-  </div>
-  </section>
-
-  </main>
-  </div>
-
-  <script>
-    const usuario = JSON.parse(localStorage.getItem('usuario'));
-    if (!usuario) {
-      alert("No has iniciado sesión");
-      window.location.href = "index.html";
-    }
-
-    document.getElementById("infoCuenta").innerText = `Usuario: ${usuario.usuario} | Rol: ${usuario.rol}`;
-
-    if (usuario.rol !== "Administrador") {
-      document.getElementById('seccionColaboradores').style.display = 'none';
-      document.getElementById('seccionCategoriaMembresia').style.display = 'none';
-      document.getElementById('opColaboradores').style.display = 'none';
-      document.getElementById('opCategoriaMembresia').style.display = 'none';
-    }
-
-    function cerrarSesion() {
-      localStorage.clear();
-      window.location.href = "index.html";
-    }
-
-    function mostrarSeccion(id) {
-      document.querySelectorAll('.seccion').forEach(sec => sec.style.display = 'none');
-      document.getElementById(id).style.display = 'block';
-    }
-
-    // Mostrar sección por defecto
-    mostrarSeccion('seccionProductos');
-
-    // Cargar membresías
-    function cargarMembresias() {
-      fetch("http://127.0.0.1:5000/detalle-membresias")
-        .then(res => res.json())
-        .then(data => {
-          const tbody = document.querySelector("#tablaMembresias tbody");
-          tbody.innerHTML = "";
-          data.forEach(m => {
-            const fila = document.createElement("tr");
-            fila.innerHTML = `
-              <td>${m.IdDetalleMembresia}</td>
-              <td>${m.IdCliente}</td>
-              <td>${m.IdMembresia}</td>
-              <td>${m.Subtotal}</td>
-              <td>${m.FechaAsignacion}</td>
-            `;
-            tbody.appendChild(fila);
-          });
-        });
-    }
-
-    document.getElementById("formMembresia").addEventListener("submit", function (e) {
-      e.preventDefault();
-      const idCliente = document.getElementById("idCliente").value;
-      const idMembresia = document.getElementById("idMembresia").value;
-      const subtotal = document.getElementById("subtotal").value;
-
-      fetch("http://127.0.0.1:5000/detalle-membresias", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idCliente, idMembresia, subtotal })
-      })
-        .then(res => res.json())
-        .then(() => {
-          alert("Membresía asignada");
-          cargarMembresias();
-          document.getElementById("formMembresia").reset();
-        });
-    });
-
-    cargarMembresias();
-  </script>
+    elif request.method == 'DELETE':
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Proveedor WHERE idProveedor = ?", id)
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'mensaje': 'Proveedor eliminado correctamente'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
 
 
+#--Categoria membresia--
 
-  <script src="js/dashboard.js"> //script para cargar reportes y estadísticas</script>
+@app.route('/categorias-membresia', methods=['GET'])
+def obtener_categorias_membresia():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT idCatMembresia, nombreCatMemb FROM categoriaMembresia")
+    categorias = [{'id': row.idCatMembresia, 'nombre': row.nombreCatMemb} for row in cursor.fetchall()]
+    conn.close()
+    return jsonify(categorias)
 
-  <script src="js/clientes.js"> //script para gestionar clientes</script>
+@app.route('/categorias-membresia', methods=['POST'])
+def agregar_categoria_membresia():
+    data = request.get_json()
+    nombre = data['nombre']
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO categoriaMembresia (nombreCatMemb) VALUES (?)", (nombre,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'mensaje': 'Categoría agregada correctamente'}), 201
 
-  <script src="js/proveedor.js"></script>
+@app.route('/categorias-membresia/<int:id>', methods=['PUT'])
+def actualizar_categoria_membresia(id):
+    data = request.get_json()
+    nombre = data['nombre']
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE categoriaMembresia SET nombreCatMemb = ? WHERE idCatMembresia = ?", (nombre, id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'mensaje': 'Categoría actualizada correctamente'})
 
-  <script src="js/categoriaProducto.js"> //categoria producto</script>
+@app.route('/categorias-membresia/<int:id>', methods=['DELETE'])
+def eliminar_categoria_membresia(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM categoriaMembresia WHERE idCatMembresia = ?", (id,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'mensaje': 'Categoría eliminada correctamente'})
 
-  <script src="js/categoriaMembresia.js">//categoria de membresias</script>
+
+# --- Reportes OLAP ---
+@app.route('/reportes/ventas-por-periodo', methods=['GET'])
+def reporte_ventas_periodo():
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            CAST(Fecha AS DATE) as Fecha,
+            COUNT(DISTINCT idVenta) as TotalVentas,
+            SUM(totalVenta) as MontoTotal
+        FROM FactVenta
+        WHERE Fecha BETWEEN ? AND ?
+        GROUP BY CAST(Fecha AS DATE)
+        ORDER BY Fecha
+    """
+    
+    cursor.execute(query, (fecha_inicio, fecha_fin))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'fecha': row.Fecha.strftime('%Y-%m-%d'),
+            'total_ventas': row.TotalVentas,
+            'monto_total': float(row.MontoTotal)
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/productos-mas-vendidos', methods=['GET'])
+def reporte_productos_mas_vendidos():
+    limit = request.args.get('limit', 10)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT TOP (?) 
+            P.NombreProducto,
+            SUM(FV.cantidadVenta) as TotalVendido,
+            SUM(FV.subtotalVenta) as MontoTotal,
+            C.nombreCategoria
+        FROM FactVenta FV
+        JOIN DimProducto P ON FV.idProducto = P.idProducto
+        JOIN CategoriaProducto C ON P.idCategoria = C.idCategoria
+        GROUP BY P.NombreProducto, C.nombreCategoria
+        ORDER BY TotalVendido DESC
+    """
+    
+    cursor.execute(query, (limit))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'producto': row.NombreProducto,
+            'total_vendido': row.TotalVendido,
+            'monto_total': float(row.MontoTotal),
+            'categoria': row.nombreCategoria
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/membresias-activas', methods=['GET'])
+def reporte_membresias_activas():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            M.nombreCatMemb as TipoMembresia,
+            COUNT(*) as Cantidad,
+            SUM(FM.subtotalMembresia) as Ingresos
+        FROM FactMembresia FM
+        JOIN DimMembresia M ON FM.idMembresia = M.idMembresia
+        WHERE FM.FechaFin >= GETDATE()
+        GROUP BY M.nombreCatMemb
+        ORDER BY Cantidad DESC
+    """
+    
+    cursor.execute(query)
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'tipo_membresia': row.TipoMembresia,
+            'cantidad': row.Cantidad,
+            'ingresos': float(row.Ingresos)
+        })
+    
+    conn.close()
+    return jsonify(resultados)
+
+@app.route('/reportes/inventario-bajo', methods=['GET'])
+def reporte_inventario_bajo():
+    umbral = request.args.get('umbral', 10)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT 
+            NombreProducto,
+            cantidadProducto as Stock,
+            nombreCategoria,
+            nombreProveedor
+        FROM DimProducto
+        WHERE cantidadProducto <= ?
+        AND estadoProducto = 'ACTIVO'
+        ORDER BY cantidadProducto ASC
+    """
+    
+    cursor.execute(query, (umbral))
+    resultados = []
+    for row in cursor.fetchall():
+        resultados.append({
+            'producto': row.NombreProducto,
+            'stock': row.Stock,
+            'categoria': row.nombreCategoria,
+            'proveedor': row.nombreProveedor
+        })
+    
+    conn.close()
+    return jsonify(resultados)
 
 
-</body>
-<!-- Modal para agregar categoría -->
-<div id="modalCategoria" class="modal" style="display:none;">
-  <div class="modal-content">
-    <span class="close" onclick="cerrarModalCategoria()">&times;</span>
-    <h3>Agregar Nueva Categoría</h3>
-    <input type="text" id="nuevaCategoria" placeholder="Nombre de la categoría">
-    <button onclick="guardarCategoria()">Guardar</button>
-  </div>
-</div>
-
-</html>
+# --- Ejecutar servidor ---
+if __name__ == '__main__':
+    app.run(port=5000, debug=True)
